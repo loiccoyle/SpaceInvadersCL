@@ -14,14 +14,21 @@ import numpy as np
 import signal
 import locale
 import time
+import subprocess
+
 locale.setlocale(locale.LC_ALL, '')
 
 
 
 encoding = lambda x: detect(x)['encoding']
 
-ship_path = 'Ship_test.ascii'
+ship_path    = 'Ship.ascii'
 invader_path = 'Invader.ascii'
+projectile_path  = 'Projectile.ascii'
+
+sounds = 'sounds/'
+shoot_sound = 'sounds/Shoot 2.wav'
+boom_sound  = 'sounds/Explosion 2.wav' 
 
 shot_path = 'shot/'
 
@@ -35,7 +42,7 @@ full_block =  u'\u2588'
 
 
 class Ship:
-   def __init__(self,path=None,x=0,y=0,speed=1,uprate=0.01,color='red',life=3,rof=1):
+   def __init__(self,path=None,x=0,y=0,speed=1,uprate=0.01,color='blue',life=3,rof=1,shoot_sound=shoot_sound):
       self.x         = x
       self.y         = y
       self.color     = color
@@ -45,6 +52,7 @@ class Ship:
       self.rof       = rof
       self.last_move = 0
       self.last_shot = 0
+      self.shoot_sound = shoot_sound
       if path != None :
          self.LoadArray(path)   
    def LoadArray(self,path):
@@ -79,7 +87,7 @@ class Ship:
    
 
 class Projectile:
-   def __init__(self,x,y,speed=1,uprate=0.01,color='red',direction='up'):
+   def __init__(self,x,y,speed=1,uprate=0.01,color='red',direction='up',path=None):
       self.x         = x
       self.y         = y
       self.speed     = speed
@@ -88,6 +96,31 @@ class Projectile:
       self.uprate    = uprate
       self.last_move = 0
       
+      if path != None :
+         self.LoadArray(path)
+         self.win   = curses.newwin(self.Shape()[0]+1,self.Shape()[1],self.y,self.x)
+         self.panel = curses.panel.new_panel(self.win)
+         for i in range(self.Shape()[0]):
+             self.win.addstr(i,0,self.lines[i],curses.color_pair(colors[self.color]))
+      else : 
+         self.lines = [['▀']]
+         charar = np.chararray((1,1),unicode=True)
+         charar[0,0] = '▀'
+         self.charar = charar
+         self.win   = curses.newwin(self.Shape()[0]+1,self.Shape()[1],self.y,self.x)
+         self.panel = curses.panel.new_panel(self.win)
+         self.win.addstr(0,0,'▀',curses.color_pair(colors[self.color]))
+   def LoadArray(self,path):
+      lines=[]
+      with open(path,'r',encoding='utf-8') as inv :
+         for line in inv:
+            lines.append(line.rstrip('\n'))
+      self.lines =lines      
+      proj_array = np.chararray((len(lines),len(lines[0])),unicode=True)
+      for i in range(proj_array.shape[0]):
+         for j in range(proj_array.shape[1]):
+            proj_array[i][j] = lines[i][j]      
+      self.charar = proj_array
    def Move(self):
       if self.direction == 'up':
          self.y=self.y-self.speed
@@ -102,7 +135,7 @@ class Projectile:
       else :
          return False
    def Shape(self):
-      return (1,1)
+      return self.charar.shape
       
    
 class Invader:
@@ -158,13 +191,14 @@ class Invader:
       self.direction=direction
       
 class Animation:
-   def __init__(self,x,y,path=None,uprate=0.2,frame=0):
+   def __init__(self,x,y,path=None,uprate=0.2,frame=0,color='white'):
       self.x      = x
       self.y      = y
       self.uprate = uprate
       self.last_draw = 0
       self.frame  = frame
       self.end    = False
+      self.color  = color
       if path != None :
          self.LoadArray(path)
    def LoadArray(self,path):
@@ -226,7 +260,6 @@ def RowApply(row,f):
 
 class Menu:
    def __init__(self,x,y,text=None,function=None):
-      global inmenu
       self.x=x
       self.y=y
       self.entries=[]
@@ -285,8 +318,15 @@ class Fade :
    def Shape(self):
       return (len(self.lines),len(self.lines[0]))
 
-def leave():
+def Menu_exit():
    return 'exit'
+def Menu_play():
+   return 'play'
+
+def playsound(sound):
+   subprocess.Popen(['aplay',sound],shell=False,stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL)
+   
 
 
 def start(stdscr):
@@ -299,8 +339,9 @@ def start(stdscr):
    stdscr.border()
    
    inmenu = True
-   menu = Menu(width//2,height//2,text='Play',function=leave)
-   menu.AddEntry('bli blob ')
+   menu = Menu(width//2,height//2,text='Play',function=Menu_play)
+   menu.AddEntry('Customize')
+   menu.AddEntry('Exit',function=Menu_exit)
    
    curses.init_pair(3, curses.COLOR_BLACK, curses.COLOR_WHITE)
    event = 0
@@ -322,7 +363,9 @@ def start(stdscr):
       if event == ord('\n'):
 #         stdscr.addstr(10,10,'m')
          out = menu.Run()
-         if out == 'exit' : inmenu = False
+         if out == 'play' : inmenu = False ; state = out
+         if out == 'custom' : inmenu = True ; state = out
+         if out == 'exit' : inmenu = False ; state = out
       
       for i,e in enumerate(menu.entries) :
          if i == menu.selected:
@@ -333,15 +376,13 @@ def start(stdscr):
       stdscr.refresh()
       event = stdscr.getch()
    
-   return 'play'
+   return state
 
 def play(stdscr):
     os.system('xset r rate 1')
     killer = GracefulKiller()
     
     k = 0
-    cursor_x = 0
-    cursor_y = 0
     
 #    curses.halfdelay(1)
     curses.mousemask(True)
@@ -357,13 +398,27 @@ def play(stdscr):
 
     # Start colors in curses
     curses.start_color()
-    curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
-    curses.init_pair(2, curses.COLOR_RED, curses.COLOR_BLACK)
+    curses.init_pair(1, curses.COLOR_WHITE,   curses.COLOR_BLACK)
+    curses.init_pair(2, curses.COLOR_RED,     curses.COLOR_BLACK) 
+    curses.init_pair(3, curses.COLOR_BLUE,    curses.COLOR_BLACK)
+    curses.init_pair(4, curses.COLOR_GREEN,   curses.COLOR_BLACK)
+    curses.init_pair(5, curses.COLOR_YELLOW,  curses.COLOR_BLACK)
+    curses.init_pair(6, curses.COLOR_CYAN,    curses.COLOR_BLACK)
+    curses.init_pair(7, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
     
-    curses.init_pair(3, curses.COLOR_BLACK, curses.COLOR_WHITE)
-    curses.init_pair(4, curses.COLOR_BLACK, curses.COLOR_YELLOW)
-    curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_RED)
+    #this is the background color I guess
+    curses.init_pair(8, curses.COLOR_BLACK,   curses.COLOR_BLACK)
     
+    # color dict
+    global colors
+    colors = {'white'  :1,
+              'red'    :2,
+              'blue'   :3,
+              'green'  :4,
+              'yellow' :5,
+              'cyan'   :6,
+              'magenta':7,
+              'black'  :8}
     
     # Initialization
     stdscr.clear()
@@ -377,60 +432,46 @@ def play(stdscr):
     w = curses.newwin(ship.Shape()[0],ship.Shape()[1]+1,ship.y,ship.x)
     p = curses.panel.new_panel(w)
     for i in range(ship.Shape()[0]):
-       w.addstr(i,0,ship.lines[i],curses.color_pair(1))
+       w.addstr(i,0,ship.lines[i],curses.color_pair(colors[ship.color]))
     
+      
+    #Spawn invaders
     invaders = []
-    for i in range(6):
-       y_row = 4*i+5
+    for i in range(4):
+       y_row = 4*i+2
        row = []
-       for x_inv in range(0,width-50,6):
+       for x_inv in range(0,width-50,7):
    #    invaders.append(Invader(path=invader_path,x=50,y=5,speed=1,uprate=1))
           row.append(Invader(path=invader_path,x=x_inv,y=y_row,speed=1,uprate=0.1))
        invaders.append(row)
     for row in invaders :
-       for inv in row :
+       for col,inv in enumerate(row) :
           for i in range(inv.Shape()[0]):
-             inv.win.addstr(i,0,inv.lines[i],curses.color_pair(2))
-      #       if ship.lines[i][j] != ' ':
-      #          w.addstr(i,j,' ',curses.color_pair(3))
-      #       else :
-      #          w.addstr(i,j,' ',curses.color_pair(1))
-       
-       
+             inv.win.addstr(i,0,inv.lines[i],curses.color_pair((col+1)%8))
+              
     # Loop where k is the last character pressed
     while (k != ord('q')):
 #        time.sleep(0.01)
         if killer.kill_now:
            os.system('xset r rate 500')
            break
-        if k == curses.KEY_DOWN:
-            cursor_y = cursor_y + 1
-        elif k == curses.KEY_UP:
-            cursor_y = cursor_y - 1
+        if k == curses.KEY_DOWN:pass
+        elif k == curses.KEY_UP:pass
         elif k == curses.KEY_RIGHT and ship.Moveable() :
-            cursor_x = cursor_x + 1
             if ship.x + ship.Shape()[1] + ship.speed < width :
                ship.MoveRight()
                if len(animations) > 0 :
                   for a in animations :
-                     a.panel.move(a.y,ship.x+2)
-                  
+                     a.panel.move(a.y,ship.x+ship.Shape()[1]//2-a.Shape()[1]//2)
         elif k == curses.KEY_LEFT and ship.Moveable() :
-            cursor_x = cursor_x - ship.speed
             if ship.x - ship.speed >= 0 :
                ship.MoveLeft()
                if len(animations) > 0 :
                   for a in animations :
-                     a.panel.move(a.y,ship.x+2)
+                     a.panel.move(a.y,ship.x+ship.Shape()[1]//2-a.Shape()[1]//2)
             
-        cursor_x = max(0, cursor_x)
-        cursor_x = min(width-1, cursor_x)
-
-        cursor_y = max(0, cursor_y)
-        cursor_y = min(height-1, cursor_y)
-
         # Declaration of strings
-        statusbarstr = "Press 'q' to exit | STATUS BAR | Pos: {}, {}".format(cursor_x, cursor_y)
+        statusbarstr = "Press 'q' to exit | STATUS BAR "
 
         # Centering calculations
 #        start_x_keystr = int((width // 2) - (len(keystr) // 2) - len(keystr) % 2)
@@ -449,18 +490,14 @@ def play(stdscr):
 #           stdscr.addstr(5,5,str(bstate))
 #           if bstate == curses.BUTTON1_PRESSED :
 #           shots.append(Projectile(mx,my,direction='up',speed=1,))))))))uprate=0.5))
-           shots.append(Projectile(ship.x+ship.Shape()[1]//2,ship.y+1,direction='up',speed=1))
-           animations.append(Animation(ship.x+2,ship.y-2,path=shot_path))
+           playsound(ship.shoot_sound)
+           temp_proj = Projectile(ship.x+ship.Shape()[1]//2,ship.y,direction='up',
+                                   speed=1,uprate=0.2,path=projectile_path)
            
-        for s in shots :
-           if s.Moveable() :
-              if s.y-s.speed < 0 :
-                 shots.remove(s)
-                 stdscr.addstr(s.y,s.x,' ',curses.color_pair(1))
-                 continue
-              stdscr.addstr(s.y,s.x,' ',curses.color_pair(1))
-              s.Move()
-              stdscr.addstr(s.y,s.x,' ',curses.color_pair(5))
+           temp_proj.x = ship.x + ship.Shape()[1]//2 - temp_proj.Shape()[1]//2
+           temp_proj.y = ship.y - temp_proj.Shape()[0]
+           shots.append(temp_proj)
+           animations.append(Animation(ship.x+2,ship.y-2,path=shot_path))
         
         for a in animations : 
           if a.end : 
@@ -472,7 +509,19 @@ def play(stdscr):
                 a.Draw()
                 a.panel.bottom()
                 for i in range(a.Shape()[0]):
-                   a.win.addstr(i,0,a.draw[i],curses.color_pair(2))
+                   a.win.addstr(i,0,a.draw[i],curses.color_pair(colors[a.color]))
+
+        for s in shots :
+           if s.Moveable() :
+              if s.y-s.speed < 0 :
+                 s.win.erase()
+                 s.panel.hide()
+                 shots.remove(s)
+#                 stdscr.addstr(s.y,s.x,' ',curses.color_pair(1))
+                 continue
+              s.panel.top()
+              s.Move()
+              s.panel.move(s.y,s.x)
              
 #        f = lambda x : x.Move()
 #        invaders[-2][1].Move()
@@ -504,11 +553,14 @@ def play(stdscr):
            collided = collision_detect(shots,row)
            for element in collided :
               if not element[1].alive : continue
-              stdscr.addstr(element[0].y,element[0].x,' ') # remove the projectile
-              shots.remove(element[0])
+              playsound(boom_sound)
               element[1].win.erase()
               element[1].panel.hide()
               element[1].alive = False
+              element[0].win.erase()
+              element[0].panel.hide()
+              
+              shots.remove(element[0])
               
 #              row.remove(element[1])
 #              if len(row) == 0 : invaders.remove(row)

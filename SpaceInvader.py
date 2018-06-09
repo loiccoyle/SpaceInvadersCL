@@ -20,12 +20,12 @@ locale.setlocale(locale.LC_ALL, '')
 
 encoding = lambda x: detect(x)['encoding']
 
-ship_path = '/home/loiccoyle/usr/Documents/Ship_test.ascii'
-invader_path = '/home/loiccoyle/usr/Documents/Invader.ascii'
+ship_path = 'Ship_test.ascii'
+invader_path = 'Invader.ascii'
 
-shot_path = '/home/loiccoyle/usr/Documents/shot/'
+shot_path = 'shot/'
 
-title_path = '/home/loiccoyle/usr/Documents/title/1' 
+title_path = 'title/1' 
 
 full_block =  u'\u2588' 
 

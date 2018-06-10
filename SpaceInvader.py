@@ -17,29 +17,22 @@ import time
 import subprocess
 
 locale.setlocale(locale.LC_ALL, '')
-
-
-
 encoding = lambda x: detect(x)['encoding']
 
-ship_path    = 'Ship.ascii'
-invader_path = 'Invader.ascii'
+ship_path        = 'Ship.ascii'
+invader_path     = 'Invader.ascii'
 projectile_path  = 'Projectile.ascii'
+projectile_inv_path  = 'Projectile_inv.ascii'
+
 
 sounds = 'sounds/'
 shoot_sound = 'sounds/Shoot 2.wav'
 boom_sound  = 'sounds/Explosion 2.wav' 
+hit_sound   = 'sounds/Hit 1.wav'
 
 shot_path = 'shot/'
 
 title_path = 'title/1' 
-
-full_block =  u'\u2588' 
-
-
-
-# code = locale.getpreferredencoding()
-
 
 class Ship:
    def __init__(self,path=None,x=0,y=0,speed=1,uprate=0.01,color='blue',life=3,rof=1,shoot_sound=shoot_sound):
@@ -96,20 +89,25 @@ class Projectile:
       self.uprate    = uprate
       self.last_move = 0
       
-      if path != None :
+      if path != None : # if a file is pecified, otherwise a simple box projectile
          self.LoadArray(path)
-         self.win   = curses.newwin(self.Shape()[0]+1,self.Shape()[1],self.y,self.x)
-         self.panel = curses.panel.new_panel(self.win)
-         for i in range(self.Shape()[0]):
-             self.win.addstr(i,0,self.lines[i],curses.color_pair(colors[self.color]))
+         
+         
       else : 
-         self.lines = [['▀']]
+         self.lines = ['▀']
          charar = np.chararray((1,1),unicode=True)
          charar[0,0] = '▀'
          self.charar = charar
-         self.win   = curses.newwin(self.Shape()[0]+1,self.Shape()[1],self.y,self.x)
-         self.panel = curses.panel.new_panel(self.win)
-         self.win.addstr(0,0,'▀',curses.color_pair(colors[self.color]))
+#         self.win   = curses.newwin(self.Shape()[0]+1,self.Shape()[1],self.y,self.x)
+#         self.panel = curses.panel.new_panel(self.win)
+#         self.win.addstr(0,0,'▀',curses.color_pair(colors[self.color]))
+         
+   def Draw(self):
+      self.win   = curses.newwin(self.Shape()[0]+1,self.Shape()[1],self.y,self.x)
+      self.panel = curses.panel.new_panel(self.win)
+      for i in range(self.Shape()[0]):
+             self.win.addstr(i,0,self.lines[i],curses.color_pair(colors[self.color]))
+             
    def LoadArray(self,path):
       lines=[]
       with open(path,'r',encoding='utf-8') as inv :
@@ -124,10 +122,9 @@ class Projectile:
    def Move(self):
       if self.direction == 'up':
          self.y=self.y-self.speed
-         self.last_move = time.time()
       if self.direction == 'down':
          self.y=self.y+self.speed
-         self.last_move = time.time()
+      self.last_move = time.time()
       return self.x, self.y
    def Moveable(self):
       if time.time() - self.last_move > self.uprate : 
@@ -139,7 +136,7 @@ class Projectile:
       
    
 class Invader:
-   def __init__(self,x=0,y=0,path=None,speed=1,uprate=0.1,color='red',direction='right'):
+   def __init__(self,x=0,y=0,path=None,speed=1,uprate=0.1,color='red',direction='right',bottom=False,rof=1):
       self.x         = x
       self.y         = y
       self.color     = color
@@ -148,6 +145,8 @@ class Invader:
       self.uprate    = uprate
       self.last_move = 0
       self.alive     = True
+      self.bottom    = bottom
+      self.rof       = rof
       if path != None :
          self.LoadArray(path)
          self.win   = curses.newwin(self.Shape()[0]+1,self.Shape()[1],self.y,self.x)
@@ -174,10 +173,9 @@ class Invader:
       else :
          if self.direction == 'left':
             self.x=self.x-self.speed
-            self.last_move = time.time()
          if self.direction == 'right':
             self.x=self.x+self.speed
-            self.last_move = time.time()
+         self.last_move = time.time()
 #         return self.x, self.y
    def MoveDown(self):
       self.y = self.y + 1
@@ -189,6 +187,14 @@ class Invader:
          return False
    def ChangeDirection(self,direction):
       self.direction=direction
+   def Shoot(self):
+      thresh = self.uprate/self.rof
+      draw = np.random.uniform(0,1)
+      if draw<thresh : 
+         return True
+      else : return False
+   def ChangeRate(self,delta):
+      self.uprate = self.uprate + delta
       
 class Animation:
    def __init__(self,x,y,path=None,uprate=0.2,frame=0,color='white'):
@@ -227,36 +233,6 @@ class Animation:
    def Shape(self):
       return (len(self.lines[0]),len(self.lines[0][0]))
       
-#         inv_array = np.chararray((len(lines),len(lines[0])),unicode=True)
-#         for i in range(inv_array.shape[0]):
-#            for j in range(inv_array.shape[1]):
-#               inv_array[i][j] = lines[i][j]      
-#         self.charar = inv_array
-      
-      
-def collision_detect(elem1,elem2) :
-   for e1 in elem1:
-      for e2 in elem2:
-         #quicker but more annoying to do the x>x>x method
-         if ((e1.x in range(e2.x,e2.x+e2.Shape()[1]) or e1.x+e1.Shape()[1]-1 in range(e2.x,e2.x+e2.Shape()[1])) and
-             (e1.y in range(e2.y,e2.y+e2.Shape()[0]) or e1.y+e1.Shape()[0]-1 in range(e2.y,e2.y+e2.Shape()[0]))):
-            yield [e1,e2]
-             
-class GracefulKiller:
-  kill_now = False
-  def __init__(self):
-    signal.signal(signal.SIGINT, self.exit_gracefully)
-    signal.signal(signal.SIGTERM, self.exit_gracefully)
-
-  def exit_gracefully(self,signum, frame):
-    self.kill_now = True
-
-def RowApply(row,f):
-   for i in row : 
-      f(i)
-#def RowMoveDown()
-#   map(f,row)
-##      f(i)
 
 class Menu:
    def __init__(self,x,y,text=None,function=None):
@@ -268,7 +244,6 @@ class Menu:
 #      self.args = *args
       if text != None:
          self.AddEntry(text,function)
-      
    def MoveDown(self):
       if self.selected+1 < len(self.entries):
          self.selected = self.selected + 1
@@ -281,8 +256,6 @@ class Menu:
    def Run(self):
       if self.entries[self.selected]['fun'] != None :
          return self.entries[self.selected]['fun']()
-#   def Center(self,width):
-#      self.x = width // 2 - len()
 
 class Fade :
    def __init__(self,x,y,path,uprate=0.1):
@@ -324,10 +297,31 @@ def Menu_play():
    return 'play'
 
 def playsound(sound):
-   subprocess.Popen(['aplay',sound],shell=False,stdout=subprocess.PIPE,
+   subprocess.Popen(['aplay','-q',sound],shell=False,stdout=subprocess.PIPE,
                             stderr=subprocess.DEVNULL)
-   
 
+# very rudimentary collision detection, can be improved if > >
+def collision_detect(elem1,elem2) :
+   for e1 in elem1:
+      for e2 in elem2:
+         #quicker but more annoying to do the x>x>x method
+         if ((e1.x in range(e2.x,e2.x+e2.Shape()[1]) or e1.x+e1.Shape()[1]-1 in range(e2.x,e2.x+e2.Shape()[1])) and
+             (e1.y in range(e2.y,e2.y+e2.Shape()[0]) or e1.y+e1.Shape()[0]-1 in range(e2.y,e2.y+e2.Shape()[0]))):
+            yield [e1,e2]
+             
+# catches Ctrl+C to clean exit especially to reset kbd rate
+class GracefulKiller:
+  kill_now = False
+  def __init__(self):
+    signal.signal(signal.SIGINT, self.exit_gracefully)
+    signal.signal(signal.SIGTERM, self.exit_gracefully)
+
+  def exit_gracefully(self,signum, frame):
+    self.kill_now = True
+
+def RowApply(row,f):
+   for i in row : 
+      f(i)
 
 def start(stdscr):
    stdscr.clear()
@@ -375,7 +369,6 @@ def start(stdscr):
       
       stdscr.refresh()
       event = stdscr.getch()
-   
    return state
 
 def play(stdscr):
@@ -419,14 +412,16 @@ def play(stdscr):
               'cyan'   :6,
               'magenta':7,
               'black'  :8}
+    inv_colors = {v: k for k, v in colors.items()}
     
     # Initialization
     stdscr.clear()
     height, width = stdscr.getmaxyx()
     
-    shots     = []
-    invaders  = []
-    animations = []
+    shots        = []
+    invaders     = []
+    animations   = []
+    invader_shots = []
     
     ship = Ship(path=ship_path,y=height-4,speed=1,rof=0.5)
     w = curses.newwin(ship.Shape()[0],ship.Shape()[1]+1,ship.y,ship.x)
@@ -434,20 +429,24 @@ def play(stdscr):
     for i in range(ship.Shape()[0]):
        w.addstr(i,0,ship.lines[i],curses.color_pair(colors[ship.color]))
     
-      
+    
     #Spawn invaders
     invaders = []
-    for i in range(4):
-       y_row = 4*i+2
+    n_rows = 4
+    for row_i in range(n_rows):
+       if row_i == n_rows - 1 : bottom = True
+       else : bottom = False
+       y_row = 4*row_i+2
        row = []
-       for x_inv in range(0,width-50,7):
+       for col,x_inv in enumerate(range(0,width-50,7)):
    #    invaders.append(Invader(path=invader_path,x=50,y=5,speed=1,uprate=1))
-          row.append(Invader(path=invader_path,x=x_inv,y=y_row,speed=1,uprate=0.1))
+          row.append(Invader(path=invader_path,x=x_inv,y=y_row,speed=1,uprate=0.1,
+                             bottom=bottom,color=inv_colors[(col)%7+1]))
        invaders.append(row)
     for row in invaders :
-       for col,inv in enumerate(row) :
+       for inv in row :
           for i in range(inv.Shape()[0]):
-             inv.win.addstr(i,0,inv.lines[i],curses.color_pair((col+1)%8))
+             inv.win.addstr(i,0,inv.lines[i],curses.color_pair(colors[inv.color]))
               
     # Loop where k is the last character pressed
     while (k != ord('q')):
@@ -483,7 +482,7 @@ def play(stdscr):
         stdscr.addstr(height-1, len(statusbarstr), " " * (width - len(statusbarstr) - 1))
         stdscr.attroff(curses.color_pair(3))
 
-        
+        # Shooting logic
         if k == curses.KEY_MOUSE and ship.Shootable() :
            ship.last_shot = time.time()
 #           _,mx,my,_,_ = curses.getmouse()
@@ -496,9 +495,36 @@ def play(stdscr):
            
            temp_proj.x = ship.x + ship.Shape()[1]//2 - temp_proj.Shape()[1]//2
            temp_proj.y = ship.y - temp_proj.Shape()[0]
+           temp_proj.Draw()
+           
            shots.append(temp_proj)
            animations.append(Animation(ship.x+2,ship.y-2,path=shot_path))
         
+
+        for s in shots :
+           if s.Moveable() :
+              if s.y-s.speed < 0 or s.y + s.speed >= height-1:
+                 s.win.erase()
+                 s.panel.hide()
+                 shots.remove(s)
+#                 stdscr.addstr(s.y,s.x,' ',curses.color_pair(1))
+                 continue
+              s.panel.top()
+              s.Move()
+              s.panel.move(s.y,s.x)
+              
+        for s in invader_shots :
+           if s.Moveable() :
+              if s.y-s.speed < 0 or s.y + s.speed >= height-1:
+                 s.win.erase()
+                 s.panel.hide()
+                 invader_shots.remove(s)
+#                 stdscr.addstr(s.y,s.x,' ',curses.color_pair(1))
+                 continue
+              s.panel.bottom()
+              s.Move()
+              s.panel.move(s.y,s.x)
+
         for a in animations : 
           if a.end : 
              a.win.erase()
@@ -511,20 +537,7 @@ def play(stdscr):
                 for i in range(a.Shape()[0]):
                    a.win.addstr(i,0,a.draw[i],curses.color_pair(colors[a.color]))
 
-        for s in shots :
-           if s.Moveable() :
-              if s.y-s.speed < 0 :
-                 s.win.erase()
-                 s.panel.hide()
-                 shots.remove(s)
-#                 stdscr.addstr(s.y,s.x,' ',curses.color_pair(1))
-                 continue
-              s.panel.top()
-              s.Move()
-              s.panel.move(s.y,s.x)
-             
-#        f = lambda x : x.Move()
-#        invaders[-2][1].Move()
+
         # Invader movement logic
         for row in invaders :
            if row[0].direction == 'right':
@@ -533,23 +546,41 @@ def play(stdscr):
               inv = row[0]
            i_x,i_y = inv.Move(fake=True)
            if i_y < height - 10 and inv.Moveable(): 
-              if i_x <= 0 :
-#                    inv.direction='right'
-                 RowApply(row,lambda x : x.ChangeDirection('right'))
-                 RowApply(row,lambda x : x.MoveDown())
-#                    inv.MoveDown()
-              elif i_x + inv.Shape()[1] >= width:
-                 RowApply(row,lambda x : x.ChangeDirection('left'))
-                 RowApply(row,lambda x : x.MoveDown())
+              if i_x <= 0 or i_x + inv.Shape()[1] >= width :
+                 if i_x <= 0 :
+   #                    inv.direction='right'
+                    RowApply(row,lambda x : x.ChangeDirection('right'))
+                    RowApply(row,lambda x : x.MoveDown())
+   #                    inv.MoveDown()
+                 elif i_x + inv.Shape()[1] >= width:
+                    RowApply(row,lambda x : x.ChangeDirection('left'))
+                    RowApply(row,lambda x : x.MoveDown())
+                 
+#                 for i in invaders:
+#                    for j in i:
+#                       j.ChangeRate(-0.005)
+                 RowApply(row,lambda x : x.ChangeRate(-0.005))
+                 stdscr.addstr(0,0,str(inv.uprate))
+                 playsound(hit_sound)
               else:
                  RowApply(row,lambda x : x.Move())
 #                    inv.Move()
         for row in invaders : 
            for inv in row :
               inv.panel.move(inv.y,inv.x)
-        
+              #invader shooting
+              if inv.alive and inv.Shoot() and inv.bottom and inv.Moveable():
+                 temp_proj = Projectile(0,0,direction='down',
+                                   speed=1,uprate=0.2,path=projectile_inv_path,color=inv.color)
+                 temp_proj.x = inv.x + inv.Shape()[1]//2 - temp_proj.Shape()[1]//2
+                 temp_proj.y = inv.y + temp_proj.Shape()[0]
+                 temp_proj.Draw()
+                 invader_shots.append(temp_proj)
+                 
+                 
+        #collision detection
         #improvement : checking collision on dead invaders
-        for row in invaders : 
+        for row_i,row in enumerate(invaders) : 
            collided = collision_detect(shots,row)
            for element in collided :
               if not element[1].alive : continue
@@ -557,22 +588,30 @@ def play(stdscr):
               element[1].win.erase()
               element[1].panel.hide()
               element[1].alive = False
-              element[0].win.erase()
-              element[0].panel.hide()
-              
-              shots.remove(element[0])
-              
+              #this finds the new bottom invader
+              if element[1].bottom :
+                 column = row.index(element[1])
+                 for j in range(len(invaders)):
+                    if invaders[j][column].alive : bottom_row = j
+                 invaders[bottom_row][column].bottom = True
+                 if column == 0: stdscr.addstr(5,0,str(bottom_row))
+#                 while not invaders[row_i-1][column].alive : 
+#                    row_i = row_i-1
+#                 invaders[row_i-1][column].bottom=True
+
+              # this removes invaders, creates non uniform row movement
 #              row.remove(element[1])
 #              if len(row) == 0 : invaders.remove(row)
-         
+              element[0].win.erase()
+              element[0].panel.hide()
+              shots.remove(element[0])
+              
         p.move(ship.y,ship.x)
         curses.panel.update_panels()
-#        curses.endwin()
         
         # Refresh the screen
         stdscr.refresh()
-
-        # Wait for next input
+        # get next input
         k = stdscr.getch()
 
 def main():

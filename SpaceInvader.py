@@ -6,7 +6,7 @@ Created on Mon May 28 00:22:55 2018
 @author: loiccoyle
 """
 
-import sys,os
+import sys, os
 import curses
 import curses.panel
 from chardet import detect
@@ -19,10 +19,10 @@ import subprocess
 locale.setlocale(locale.LC_ALL, '')
 encoding = lambda x: detect(x)['encoding']
 
-ship_path        = 'Ship.ascii'
-invader_path     = 'Invader.ascii'
-projectile_path  = 'Projectile.ascii'
-projectile_inv_path  = 'Projectile_inv.ascii'
+ship_path        = 'sprites/Ship.ascii'
+invader_path     = 'sprites/Invader.ascii'
+projectile_path  = 'sprites/Projectile.ascii'
+projectile_inv_path  = 'sprites/Projectile_inv.ascii'
 
 
 sounds = 'sounds/'
@@ -292,9 +292,14 @@ class Fade :
       return (len(self.lines),len(self.lines[0]))
 
 def Menu_exit():
+#   exit()
    return 'exit'
 def Menu_play():
    return 'play'
+def Menu_custom():
+   return 'custom'
+def Menu_start():
+   return 'start'
 
 def playsound(sound):
    subprocess.Popen(['aplay','-q',sound],shell=False,stdout=subprocess.PIPE,
@@ -334,7 +339,7 @@ def start(stdscr):
    
    inmenu = True
    menu = Menu(width//2,height//2,text='Play',function=Menu_play)
-   menu.AddEntry('Customize')
+   menu.AddEntry('Customize',function=Menu_custom)
    menu.AddEntry('Exit',function=Menu_exit)
    
    curses.init_pair(3, curses.COLOR_BLACK, curses.COLOR_WHITE)
@@ -358,7 +363,7 @@ def start(stdscr):
 #         stdscr.addstr(10,10,'m')
          out = menu.Run()
          if out == 'play' : inmenu = False ; state = out
-         if out == 'custom' : inmenu = True ; state = out
+         if out == 'custom' : inmenu = False ; state = out
          if out == 'exit' : inmenu = False ; state = out
       
       for i,e in enumerate(menu.entries) :
@@ -369,6 +374,76 @@ def start(stdscr):
       
       stdscr.refresh()
       event = stdscr.getch()
+   return state
+
+def custom(stdscr):
+   from curses.textpad import Textbox,rectangle
+   
+   
+   curses.cbreak()
+   
+   stdscr.clear()
+   curses.start_color()
+   stdscr.nodelay(1)
+   curses.curs_set(0)
+   height, width = stdscr.getmaxyx()
+   stdscr.border()
+   inmenu=True
+   menu_pos = (width//10,height//3)
+   stdscr.addstr(menu_pos[1]-3,menu_pos[0],'~= Assets =~')
+   menu = Menu(menu_pos[0],menu_pos[1])
+   
+   event = 0
+   
+   ncols, nlines = width//2-3, height-4
+   uly, ulx = 2, width//2
+   rectangle(stdscr,uly-1,ulx-1,uly+nlines,ulx+ncols)
+   
+   sprites = os.listdir('sprites/')
+#   stdscr.addstr(2,2,sprites[0])
+   for spr in sprites : 
+      menu.AddEntry(spr)
+   menu.AddEntry('< Back',function=Menu_start)
+   
+   while inmenu :
+      if event == curses.KEY_DOWN:
+         menu.MoveDown()
+      if event == curses.KEY_UP:
+         menu.MoveUp()
+      if event == ord('\n'):
+         out = menu.Run()
+         if out == 'start' : inmenu=False; state = out; break
+         
+         curses.curs_set(1)
+         win = curses.newwin(nlines,ncols,uly,ulx)
+         stdscr.addstr(uly-2,ulx,'Press Ctrl+g to leave editor')
+         stdscr.refresh()
+         file = 'sprites/' + menu.entries[menu.selected]['text']
+         with open(file,'r') as sprite :
+            k=0
+            for line in sprite :
+               win.addstr(k,0,line)
+               k += 1
+         box = Textbox(win,insert_mode=False)
+         content = box.edit()
+         stdscr.addstr(uly-2,ulx,'                            ')
+         stdscr.border()
+         del win
+         stdscr.touchwin()
+         stdscr.refresh()
+#         rectangle.erase()
+         curses.curs_set(0)
+         
+      
+      for i,e in enumerate(menu.entries) :
+         if i == menu.selected:
+            stdscr.addstr(menu.y+menu.spacing*i,menu.x,e['text'],curses.color_pair(3))
+         else :
+            stdscr.addstr(menu.y+menu.spacing*i,menu.x,e['text'])
+      
+      stdscr.refresh()
+      event = stdscr.getch()
+      
    return state
 
 def play(stdscr):
@@ -616,10 +691,13 @@ def play(stdscr):
 
 def main():
    state = 'start'
-   if state == 'start' :
-      state = curses.wrapper(start)
-   if state == 'play' : 
-      state = curses.wrapper(play)
+   while state != 'exit' :
+      if state == 'start' :
+         state = curses.wrapper(start)
+      if state == 'custom' :
+         state = curses.wrapper(custom)
+      if state == 'play' : 
+         state = curses.wrapper(play)
 
 
 if __name__ == "__main__":

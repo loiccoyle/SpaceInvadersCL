@@ -29,6 +29,7 @@ sounds = 'sounds/'
 shoot_sound = 'sounds/Shoot 2.wav'
 boom_sound  = 'sounds/Explosion 2.wav' 
 hit_sound   = 'sounds/Hit 1.wav'
+select_sound = 'sounds/Select 1.wav'
 
 shot_path = 'shot/'
 
@@ -244,17 +245,20 @@ class Menu:
 #      self.args = *args
       if text != None:
          self.AddEntry(text,function)
-   def MoveDown(self):
+   def MoveDown(self,sound=None):
       if self.selected+1 < len(self.entries):
          self.selected = self.selected + 1
-   def MoveUp(self):
+         if sound != None : playsound(sound)
+   def MoveUp(self,sound=None):
       if self.selected-1 >= 0:
          self.selected = self.selected - 1
+         if sound != None : playsound(sound)
    def AddEntry(self,text,function=None):
       dic = {'text':text,'fun':function}
       self.entries.append(dic)
-   def Run(self):
+   def Run(self,sound=None):
       if self.entries[self.selected]['fun'] != None :
+         if sound != None : playsound(sound)
          return self.entries[self.selected]['fun']()
 
 class Fade :
@@ -329,6 +333,7 @@ def RowApply(row,f):
       f(i)
 
 def start(stdscr):
+   os.system('xset r rate 500')
    stdscr.clear()
    curses.start_color()
    stdscr.nodelay(1)
@@ -378,10 +383,7 @@ def start(stdscr):
 
 def custom(stdscr):
    from curses.textpad import Textbox,rectangle
-   
-   
    curses.cbreak()
-   
    stdscr.clear()
    curses.start_color()
    stdscr.nodelay(1)
@@ -407,7 +409,7 @@ def custom(stdscr):
    
    while inmenu :
       if event == curses.KEY_DOWN:
-         menu.MoveDown()
+          menu.MoveDown()
       if event == curses.KEY_UP:
          menu.MoveUp()
       if event == ord('\n'):
@@ -416,6 +418,8 @@ def custom(stdscr):
          
          curses.curs_set(1)
          win = curses.newwin(nlines,ncols,uly,ulx)
+         
+         # instructions 
          stdscr.addstr(uly-2,ulx,'Press Ctrl+g to leave editor')
          stdscr.refresh()
          file = 'sprites/' + menu.entries[menu.selected]['text']
@@ -426,8 +430,15 @@ def custom(stdscr):
                k += 1
          box = Textbox(win,insert_mode=False)
          content = box.edit()
+#         content = box.gather()
+         stdscr.addstr(2,2,content)
+         with open('test','w',encoding='utf-8') as out :
+            out.write(content)
+         
+         # clears the instructions
          stdscr.addstr(uly-2,ulx,'                            ')
          stdscr.border()
+         
          del win
          stdscr.touchwin()
          stdscr.refresh()
@@ -447,6 +458,7 @@ def custom(stdscr):
    return state
 
 def play(stdscr):
+   
     os.system('xset r rate 1')
     killer = GracefulKiller()
     
@@ -614,32 +626,35 @@ def play(stdscr):
 
 
         # Invader movement logic
-        for row in invaders :
-           if row[0].direction == 'right':
-              inv = row[-1]
-           if row[0].direction == 'left':
-              inv = row[0]
-           i_x,i_y = inv.Move(fake=True)
-           if i_y < height - 10 and inv.Moveable(): 
-              if i_x <= 0 or i_x + inv.Shape()[1] >= width :
-                 if i_x <= 0 :
-   #                    inv.direction='right'
+#        for row in invaders : # take the most left or right invader
+        k=-1
+        while not True in [i.alive for i in invaders[k]]:
+           k=k-1
+        row = invaders[k]
+        if row[0].direction == 'right':
+           inv = row[-1]
+        if row[0].direction == 'left':
+           inv = row[0]
+        i_x,i_y = inv.Move(fake=True) # get the coords of next step
+        if inv.Moveable():# if above the 10
+           if i_x <= 0 or i_x + inv.Shape()[1] >= width :
+              if i_x <= 0 :
+                 for row in invaders :
                     RowApply(row,lambda x : x.ChangeDirection('right'))
-                    RowApply(row,lambda x : x.MoveDown())
-   #                    inv.MoveDown()
-                 elif i_x + inv.Shape()[1] >= width:
+              elif i_x + inv.Shape()[1] >= width:
+                 for row in invaders :
                     RowApply(row,lambda x : x.ChangeDirection('left'))
+              if i_y < height - 10 : 
+                 for row in invaders :
                     RowApply(row,lambda x : x.MoveDown())
+              
+              for row in invaders : RowApply(row,lambda x : x.ChangeRate(-0.005))
+              stdscr.addstr(0,0,str(inv.uprate))
+              playsound(hit_sound)
+           else:
+              for row in invaders : RowApply(row,lambda x : x.Move())
                  
-#                 for i in invaders:
-#                    for j in i:
-#                       j.ChangeRate(-0.005)
-                 RowApply(row,lambda x : x.ChangeRate(-0.005))
-                 stdscr.addstr(0,0,str(inv.uprate))
-                 playsound(hit_sound)
-              else:
-                 RowApply(row,lambda x : x.Move())
-#                    inv.Move()
+ #                    inv.Move()
         for row in invaders : 
            for inv in row :
               inv.panel.move(inv.y,inv.x)
@@ -688,6 +703,7 @@ def play(stdscr):
         stdscr.refresh()
         # get next input
         k = stdscr.getch()
+    return 'start'
 
 def main():
    state = 'start'

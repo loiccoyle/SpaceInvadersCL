@@ -37,6 +37,15 @@ SHOT_PATH = 'shot/'
 
 TITLE_PATH = 'title/1'
 
+COLOURS = {'white':1,
+           'red':2,
+           'blue':3,
+           'green':4,
+           'yellow':5,
+           'cyan':6,
+           'magenta':7,
+           'black':8}
+
 class Ship:
    '''
    Ship class, arguments :
@@ -129,7 +138,7 @@ class Projectile:
       self.win = curses.newwin(self.Shape()[0]+1, self.Shape()[1], self.y, self.x)
       self.panel = curses.panel.new_panel(self.win)
       for i in range(self.Shape()[0]):
-             self.win.addstr(i, 0, self.lines[i], curses.color_pair(colors[self.color]))
+             self.win.addstr(i, 0, self.lines[i], curses.color_pair(COLOURS[self.color]))
 
    def LoadArray(self, path):
       '''Laods the projectile path to array'''
@@ -332,9 +341,9 @@ def collision_detect(elem1, elem2):
         for e2 in elem2:
             #quicker but more annoying to do the x>x>x method
             if ((e1.x in range(e2.x, e2.x+e2.Shape()[1]) or
-                e1.x+e1.Shape()[1]-1 in range(e2.x, e2.x+e2.Shape()[1])) and
-                   (e1.y in range(e2.y, e2.y+e2.Shape()[0]) or
-                    e1.y+e1.Shape()[0]-1 in range(e2.y, e2.y+e2.Shape()[0]))):
+                 e1.x+e1.Shape()[1]-1 in range(e2.x, e2.x+e2.Shape()[1])) and
+                (e1.y in range(e2.y, e2.y+e2.Shape()[0]) or
+                 e1.y+e1.Shape()[0]-1 in range(e2.y, e2.y+e2.Shape()[0]))):
                 yield [e1, e2]
 
 # catches Ctrl+C to clean exit especially to reset kbd rate
@@ -517,16 +526,9 @@ def play(stdscr):
     curses.init_pair(8, curses.COLOR_BLACK, curses.COLOR_BLACK)
 
     # color dict
-    global colors
-    colors = {'white':1,
-              'red':2,
-              'blue':3,
-              'green':4,
-              'yellow':5,
-              'cyan':6,
-              'magenta':7,
-              'black':8}
-    inv_colors = {v: k for k, v in colors.items()}
+    global COLOURS
+
+    inv_colors = {v: k for k, v in COLOURS.items()}
 
     # Initialization
     stdscr.clear()
@@ -541,7 +543,7 @@ def play(stdscr):
     w = curses.newwin(ship.Shape()[0], ship.Shape()[1]+1, ship.y, ship.x)
     p = curses.panel.new_panel(w)
     for i in range(ship.Shape()[0]):
-       w.addstr(i, 0, ship.lines[i], curses.color_pair(colors[ship.color]))
+       w.addstr(i, 0, ship.lines[i], curses.color_pair(COLOURS[ship.color]))
 
 
     #Spawn invaders
@@ -559,7 +561,7 @@ def play(stdscr):
     for row in invaders:
        for inv in row:
           for i in range(inv.Shape()[0]):
-             inv.win.addstr(i, 0, inv.lines[i], curses.color_pair(colors[inv.color]))
+             inv.win.addstr(i, 0, inv.lines[i], curses.color_pair(COLOURS[inv.color]))
 
     # Loop where k is the last character pressed
     while k != ord('q'):
@@ -650,7 +652,7 @@ def play(stdscr):
                 a.Draw()
                 a.panel.bottom()
                 for i in range(a.Shape()[0]):
-                   a.win.addstr(i, 0, a.draw[i], curses.color_pair(colors[a.color]))
+                   a.win.addstr(i, 0, a.draw[i], curses.color_pair(COLOURS[a.color]))
 
 
         # Invader movement logic

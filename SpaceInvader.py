@@ -184,7 +184,7 @@ class Projectile:
         return self.x, self.y
 
     def Moveable(self):
-        '''return true is proctile can move, false if not'''
+        '''return true is projectile can move, false if not'''
         return time.time() - self.last_move > self.uprate
 
     def Shape(self):
@@ -498,6 +498,23 @@ def RowApply(row, f):
     for i in row:
         f(i)
 
+def Shot_mvt(shot_tab,height,zorder='bottom'):
+
+    for s in shot_tab:
+        if s.Moveable():
+            if s.y - s.speed < 0 or s.y + s.speed >= height - 1:
+                s.win.erase()
+                s.panel.hide()
+                shot_tab.remove(s)
+#                 stdscr.addstr(s.y, s.x, ' ', curses.color_pair(1))
+                continue
+            if zorder == 'bottom':
+                s.panel.bottom()
+            if zorder == 'top':
+                s.panel.top()
+            s.Move()
+            s.panel.move(s.y, s.x)
+    return shot_tab
 
 def start(stdscr):
     '''
@@ -657,7 +674,7 @@ def play(stdscr):
     killer = GracefulKiller()
 
     k = 0
-
+    score = 0
 
 #    curses.halfdelay(1)
     curses.mousemask(True)
@@ -753,11 +770,7 @@ def play(stdscr):
                                      [1] // 2 - a.Shape()[1] // 2)
 
         # Declaration of strings
-        statusbarstr = "Press 'q' to exit | STATUS BAR "
-
-        # Centering calculations
-#        start_x_keystr = int((width // 2) - (len(keystr) // 2) - len(keystr) % 2)
-#        start_y = int((height // 2) - 2)
+        statusbarstr = "Press 'q' to exit | Score : {} | Lifes : {}".format(score,ship.life)
 
         # Render status bar
         stdscr.attron(curses.color_pair(3))
@@ -770,9 +783,7 @@ def play(stdscr):
         if k == curses.KEY_MOUSE and ship.Shootable():
             ship.last_shot = time.time()
 #           _, mx, my, _, _ = curses.getmouse()
-#           stdscr.addstr(5, 5, str(bstate))
 #           if bstate == curses.BUTTON1_PRESSED:
-# shots.append(Projectile(mx, my, direction='up', speed=1, uprate=0.5))
             playsound(ship.shoot_sound)
             temp_proj = Projectile(
                 ship.x + ship.Shape()[1] // 2,
@@ -794,29 +805,8 @@ def play(stdscr):
                     ship.y - 2,
                     path=SHOT_PATH))
 
-        for s in shots:
-            if s.Moveable():
-                if s.y - s.speed < 0 or s.y + s.speed >= height - 1:
-                    s.win.erase()
-                    s.panel.hide()
-                    shots.remove(s)
-#                 stdscr.addstr(s.y, s.x, ' ', curses.color_pair(1))
-                    continue
-                s.panel.top()
-                s.Move()
-                s.panel.move(s.y, s.x)
-
-        for s in invader_shots:
-            if s.Moveable():
-                if s.y - s.speed < 0 or s.y + s.speed >= height - 1:
-                    s.win.erase()
-                    s.panel.hide()
-                    invader_shots.remove(s)
-#                 stdscr.addstr(s.y, s.x, ' ', curses.color_pair(1))
-                    continue
-                s.panel.bottom()
-                s.Move()
-                s.panel.move(s.y, s.x)
+        shots = Shot_mvt(shots,height,zorder='top')
+        invader_shots = Shot_mvt(invader_shots,height,zorder='bottom')
 
         for a in animations:
             if a.end:
@@ -870,7 +860,6 @@ def play(stdscr):
                 inv.panel.move(inv.y, inv.x)
                 # invader shooting
                 if inv.bottom and inv.Moveable() and inv.alive and inv.Shoot():
-                    stdscr.addstr(inv.y+5,inv.x,'True')
                     temp_proj = Projectile(
                         0,
                         0,
@@ -888,33 +877,41 @@ def play(stdscr):
         # collision detection
         # improvement: checking collision on dead invaders: done !
         for row_i, row in enumerate(invaders):
-            collided = collision_detect(shots, [i for i in row if i.alive])
-            for element in collided:
-                if not element[1].alive:
-                    continue
-                playsound(BOOM_SOUND)
-                element[1].win.erase()
-                element[1].panel.hide()
-                element[1].alive = False
-                # this finds the new bottom invader
-                if element[1].bottom:
-                    column = row.index(element[1])
-                    for j,_ in enumerate(invaders):
-                        if invaders[j][column].alive:
-                            bottom_row = j
-                    invaders[bottom_row][column].bottom = True
-                    if column == 0:
-                        stdscr.addstr(5, 0, str(bottom_row))
-#                 while not invaders[row_i-1][column].alive:
-#                    row_i = row_i-1
-#                 invaders[row_i-1][column].bottom=True
+            row_alive_invaders =  [i for i in row if i.alive]
+            if row_alive_invaders:
+                collided = collision_detect(shots,row_alive_invaders)
+                for element in collided:
+                    if not element[1].alive:
+                        continue
+                    playsound(BOOM_SOUND)
+                    element[1].win.erase()
+                    element[1].panel.hide()
+                    element[1].alive = False
+                    score += 10
+                    # this finds the new bottom invader
+                    if element[1].bottom:
+                        column = row.index(element[1])
+                        for j,_ in enumerate(invaders):
+                            if invaders[j][column].alive:
+                                bottom_row = j
+                        invaders[bottom_row][column].bottom = True
+                        if column == 0:
+                            stdscr.addstr(5, 0, str(bottom_row))
+                    element[0].win.erase()
+                    element[0].panel.hide()
+                    shots.remove(element[0])
+            else:
+                invaders.remove(row)
 
-                # this removes invaders, creates non uniform row movement
-#              row.remove(element[1])
-#              if len(row) == 0: invaders.remove(row)
-                element[0].win.erase()
-                element[0].panel.hide()
-                shots.remove(element[0])
+        #Ship collision logic
+        collided = collision_detect(invader_shots,[ship])
+        for element in collided:
+            element[1].life -= 1
+            #here is trigger for death sequence
+            element[0].win.erase()
+            element[0].panel.hide()
+            invader_shots.remove(element[0])
+
 
         p.move(ship.y, ship.x)
         curses.panel.update_panels()
